@@ -1,24 +1,24 @@
+import inspect
 from typing import (
-    Optional,
-    Type,
-    Union,
+    Any,
+    Callable,
+    Dict,
     Iterable,
     Iterator,
-    Callable,
-    Tuple,
     List,
-    Dict,
     Mapping,
-    Any,
+    Optional,
+    Tuple,
+    Type,
+    Union,
 )
 
-import inspect
 import numpy as np  # type: ignore
 import torch  # type: ignore
-from torch import nn, Tensor
-from torch.utils.data import Dataset, IterableDataset, DataLoader
-from functorch import make_functional_with_buffers, jacrev, vmap
-from functorch._src.make_functional import FunctionalModuleWithBuffers
+from torch import Tensor, nn
+from torch.func import jacrev, make_functional_with_buffers, vmap
+from torch.func._src.make_functional import FunctionalModuleWithBuffers
+from torch.utils.data import DataLoader, Dataset, IterableDataset
 
 from .distributions.distribution import DistributionLayer
 from .distributions.normal import NormalMeanParamLayer
@@ -101,9 +101,7 @@ class SCOD(nn.Module):
         """
         super().__init__()
         self._model = model
-        self._output_agg_func: Optional[
-            Callable[[Tensor, int], Union[Tensor, Tuple[Tensor, Tensor]]]
-        ] = (
+        self._output_agg_func: Optional[Callable[[Tensor, int], Union[Tensor, Tuple[Tensor, Tensor]]]] = (
             getattr(torch, output_agg_func) if isinstance(output_agg_func, str) else output_agg_func
         )
         self._output_dist = output_dist_cls()
@@ -210,13 +208,9 @@ class SCOD(nn.Module):
 
         # Incrementally build new sketch from samples.
         self.functional_model = make_functional_with_buffers(self._model)
-        sketch = self._sketch_cls(
-            self._num_params, self._num_eigs, self._num_samples, device=self._device
-        )
+        sketch = self._sketch_cls(self._num_params, self._num_eigs, self._num_samples, device=self._device)
         for sample in dataloader:
-            inputs, targets, batch_size = self._format_sample(
-                sample, input_keys, target_key, inputs_only
-            )
+            inputs, targets, batch_size = self._format_sample(sample, input_keys, target_key, inputs_only)
             # Compute test weight Fischer: L_w = J_f.T @ L_theta.
             L_w, _ = self._compute_jacobians_outputs(inputs, targets, batch_size)
             sketch.low_rank_update(L_w)
@@ -225,9 +219,7 @@ class SCOD(nn.Module):
         del L_w
         eigs, basis = sketch.eigs()
         del sketch
-        self._gauss_newton_eigs.data = torch.clamp_min(eigs[-self._num_eigs :], min=0).to(
-            self._device
-        )
+        self._gauss_newton_eigs.data = torch.clamp_min(eigs[-self._num_eigs :], min=0).to(self._device)
         self._gauss_newton_basis.data = basis[:, -self._num_eigs :].to(self._device)
         self._configured.data = torch.ones(1, dtype=torch.bool).to(self._device)
 
@@ -295,9 +287,7 @@ class SCOD(nn.Module):
         UT_L = self._gauss_newton_basis.t() @ L
         D = (self._gauss_newton_eigs / (1 / self._prior_scale + self._gauss_newton_eigs))[:, None]
         S = self._prior_scale * (L.transpose(2, 1) @ L - UT_L.transpose(2, 1) @ (D * UT_L))
-        E = self._prior_scale * (
-            torch.sum(L**2, dim=(1, 2)) - torch.sum((torch.sqrt(D) * UT_L) ** 2, dim=(1, 2))
-        )
+        E = self._prior_scale * (torch.sum(L**2, dim=(1, 2)) - torch.sum((torch.sqrt(D) * UT_L) ** 2, dim=(1, 2)))
         return torch.diagonal(S, dim1=1, dim2=2), E.unsqueeze(-1)
 
     def _posterior_predictive_variance(self, JT: Tensor) -> Tensor:
@@ -326,12 +316,8 @@ class SCOD(nn.Module):
         """
 
         UT_L = self._gauss_newton_basis.t() @ L
-        D = torch.sqrt(
-            (self._gauss_newton_eigs / (1 / self._prior_scale + self._gauss_newton_eigs))
-        )[:, None]
-        E = self._prior_scale * (
-            torch.sum(L**2, dim=(1, 2)) - torch.sum((D * UT_L) ** 2, dim=(1, 2))
-        )
+        D = torch.sqrt((self._gauss_newton_eigs / (1 / self._prior_scale + self._gauss_newton_eigs)))[:, None]
+        E = self._prior_scale * (torch.sum(L**2, dim=(1, 2)) - torch.sum((D * UT_L) ** 2, dim=(1, 2)))
         return E.unsqueeze(-1)
 
     def _compute_jacobians_outputs(
@@ -371,9 +357,7 @@ class SCOD(nn.Module):
             self._in_dims = in_dims
         assert self._compute_batched_jacobians is not None
 
-        jacobians, outputs = self._compute_batched_jacobians(
-            *self.functional_model, targets, *inputs
-        )
+        jacobians, outputs = self._compute_batched_jacobians(*self.functional_model, targets, *inputs)
         jacobians = self._format_jacobian(jacobians, batch_size, outputs.size(-1))
 
         if not jacobians.size() == (batch_size, self._num_params, outputs.size(-1)):
@@ -486,9 +470,7 @@ class SCOD(nn.Module):
 
         if x.dim() == 2 and x.size(0) > 1:
             if self._output_agg_func is None:
-                raise ValueError(
-                    "output_agg_func must be a torch function if model outputs an Iterable."
-                )
+                raise ValueError("output_agg_func must be a torch function if model outputs an Iterable.")
             x = self._output_agg_func(x, dim=0)
             if not isinstance(x, Tensor):
                 try:
