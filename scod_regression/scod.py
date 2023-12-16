@@ -16,14 +16,16 @@ from typing import (
 import numpy as np  # type: ignore
 import torch  # type: ignore
 from torch import Tensor, nn
-from torch.func import jacrev, make_functional_with_buffers, vmap
-from torch.func._src.make_functional import FunctionalModuleWithBuffers
+from torch._functorch.apis import vmap
+from torch._functorch.eager_transforms import jacrev
+from torch._functorch.make_functional import FunctionalModuleWithBuffers
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
 from .distributions.distribution import DistributionLayer
 from .distributions.normal import NormalMeanParamLayer
 from .sketching import SinglePassPCA
 from .utils import tensors
+from .utils.make_functional import make_functional_with_buffers
 
 
 class SCOD(nn.Module):
